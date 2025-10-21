@@ -107,16 +107,20 @@ def main():
         # current_ep += 1
 
         if not os.path.isdir(demo_dir):
-            print(f"Skipping episode {current_ep} as it does not exist.")
+            print(f"Skipping episode {current_ep} as directory {demo_dir} does not exist.")
             continue
         else:
             demo_id = str(current_ep).zfill(4)
             demo_dir = os.path.join(load_dir, f"demo_{demo_id}")
             # current_demo_index += 1
 
-        with open(os.path.join(demo_dir, "metadata.json"), encoding="utf-8") as f:
-            # print("metadata load dir:", demo_dir)
-            metadata = json.load(f)
+        try:
+            with open(os.path.join(demo_dir, "metadata.json"), encoding="utf-8") as f:
+                metadata = json.load(f)
+        except Exception as e:
+            print(f"Error loading metadata for episode {current_ep}: {e}")
+            continue
+
         data_length = len(metadata["joint_qpos"])
         rgbs = iio.mimread(os.path.join(demo_dir, "rgb.mp4"))
         for i, rgb in enumerate(rgbs):
