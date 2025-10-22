@@ -2,7 +2,7 @@ from typing import Dict
 
 import torch
 import torch.nn.functional as F
-from diffusion_policy.model.diffusion.conditional_unet1d import ConditionalUnet1D
+from diffusion_policy.model.diffusion.flow_transformer import FlowTransformer
 from diffusion_policy.model.diffusion.mask_generator import LowdimMaskGenerator
 from diffusion_policy.model.vision.multi_image_obs_encoder import MultiImageObsEncoder
 from einops import reduce
@@ -12,7 +12,7 @@ from roboverse_learn.il.utils.common.pytorch_util import dict_apply
 from roboverse_learn.il.dp.models.base_image_policy import BaseImagePolicy
 
 
-class FlowMatchingUnetImagePolicy(BaseImagePolicy):
+class FlowMatchingDiTImagePolicy(BaseImagePolicy):
     def __init__(
         self,
         shape_meta: dict,
@@ -23,11 +23,11 @@ class FlowMatchingUnetImagePolicy(BaseImagePolicy):
         num_inference_steps=None,
         obs_as_global_cond=True,
         diffusion_step_embed_dim=256,
-        down_dims=(256, 512, 1024),
-        kernel_size=5,
-        n_groups=8,
-        cond_predict_scale=True,
-        # parameters passed to step
+        hidden_dim=512,
+        num_layers=4,
+        num_heads=8,
+        mlp_ratio=4.0,
+        dropout=0.1,
         **kwargs,
     ):
         super().__init__()
@@ -45,17 +45,18 @@ class FlowMatchingUnetImagePolicy(BaseImagePolicy):
         if obs_as_global_cond:
             input_dim = action_dim
             global_cond_dim = obs_feature_dim * n_obs_steps
-
+        
         # Instantiate the Unet model
-        model = ConditionalUnet1D(
+        model = FlowTransformer(
             input_dim=input_dim,
-            local_cond_dim=None,
-            global_cond_dim=global_cond_dim,
-            diffusion_step_embed_dim=diffusion_step_embed_dim,
-            down_dims=down_dims,
-            kernel_size=kernel_size,
-            n_groups=n_groups,
-            cond_predict_scale=cond_predict_scale,
+            condition_dim=global_cond_dim,
+            hidden_dim=hidden_dim,
+            output_dim=input_dim,
+            num_layers=num_layers,
+            num_heads=num_heads,
+            mlp_ratio=mlp_ratio,
+            dropout=dropout,
+            time_embed_dim=diffusion_step_embed_dim,
         )
 
         self.obs_encoder = obs_encoder

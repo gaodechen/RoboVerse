@@ -18,34 +18,39 @@ train_enable=True
 eval_enable=True
 
 ## Choose training or inference algorithm
-algo_choose=2  # 0: DDPM, 1: DDIM, 2: FM  3: Score-based
+algo_choose=0  # 0: DDPM, 1: DDIM, 2: FM UNet 3: FM DiT  4: Score-based
 
 algo_model=""
 eval_path=""
 case $algo_choose in
     0)
         # DDPM settings
-        export algo_model="DDPM_model"
+        export algo_model="ddpm_model"
         eval_path="/home/jjindou/RoboVerse/info/outputs/DP/2025.10.09/13.25.24_close_box_obs:joint_pos_act:joint_pos/checkpoints/100.ckpt"
         ;;
     1)
         # DDIM settings
-        export algo_model="DDIM_model"
+        export algo_model="ddim_model"
         eval_path="/home/jjindou/RoboVerse/info/outputs/DP/2025.09.03/13.40.19_close_box_obs:joint_pos_act:joint_pos/checkpoints/100.ckpt"
         ;;
     2)
-        # FM settings
-        export algo_model="fm_model"
+        # FM U-Net settings
+        export algo_model="fm_unet_model"
         eval_path="/home/jjindou/RoboVerse/info/outputs/DP/2025.09.03/02.39.59_close_box_obs:joint_pos_act:joint_pos/checkpoints/100.ckpt"
         ;;
     3)
+        # FM DiT Settings
+        export algo_model="fm_dit_model"
+        eval_path="/home/jjindou/RoboVerse/info/outputs/DP/2025.09.03/02.39.59_close_box_obs:joint_pos_act:joint_pos/checkpoints/100.ckpt"
+        ;;
+    4)
         # Score-based settings
-        export algo_model="Score_model"
+        export algo_model="score_model"
         eval_path="/home/jjindou/RoboVerse/info/outputs/DP/2025.09.03/02.39.59_close_box_obs:joint_pos_act:joint_pos/checkpoints/100.ckpt"
         ;;
     *)
         echo "Invalid algorithm choice: $algo_choose"
-        echo "Available options: 0 (DDPM), 1 (DDIM), 2 (FM), 3 (Score)"
+        echo "Available options: 0 (DDPM), 1 (DDIM), 2 (FM UNet), 3 (FM DiT), 4 (Score-based)"
         exit 1
         ;;
 esac
