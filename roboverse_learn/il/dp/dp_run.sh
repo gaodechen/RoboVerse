@@ -18,7 +18,7 @@ train_enable=True
 eval_enable=True
 
 ## Choose training or inference algorithm
-algo_choose=5  # 0: DDPM, 1: DDIM, 2: FM UNet 3: FM DiT  4: Score-based 5: VITA
+algo_choose=0  # 0: DDPM, 1: DDIM, 2: FM UNet 3: FM DiT  4: Score-based 5: VITA
 
 algo_model=""
 eval_path=""

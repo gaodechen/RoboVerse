@@ -44,7 +44,7 @@ class CNNActionEncoder(nn.Module):
 
         conv_output_length = pred_horizon // (2 ** num_layers)
         conv_output_dim = hidden_dim * conv_output_length
-        
+
         self.latent_proj = nn.Linear(conv_output_dim, latent_dim)
 
         self.apply(weights_init_encoder)

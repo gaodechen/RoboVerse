@@ -58,7 +58,7 @@ class VITAImagePolicy(BaseImagePolicy):
             obs_feature_dim * n_obs_steps,
             latent_dim
         )
-        
+
         self.flow_net = SimpleFlowNet(
             input_dim=latent_dim,
             hidden_dim=flow_net.hidden_dim,

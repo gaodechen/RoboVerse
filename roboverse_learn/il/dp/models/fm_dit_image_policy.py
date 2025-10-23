@@ -45,7 +45,7 @@ class FlowMatchingDiTImagePolicy(BaseImagePolicy):
         if obs_as_global_cond:
             input_dim = action_dim
             global_cond_dim = obs_feature_dim * n_obs_steps
-        
+
         # Instantiate the Unet model
         model = FlowTransformer(
             input_dim=input_dim,
