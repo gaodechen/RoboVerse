@@ -1,60 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from functools import partial
-from itertools import repeat
-import collections.abc
 
 from diffusion_policy.model.diffusion.positional_embedding import RotaryPosEmb, SinusoidalPosEmb
-
-
-def _ntuple(n):
-    def parse(x):
-        if isinstance(x, collections.abc.Iterable) and not isinstance(x, str):
-            return tuple(x)
-        return tuple(repeat(x, n))
-    return parse
-
-
-to_2tuple = _ntuple(2)
-
-
-class Mlp(nn.Module):
-    """ MLP as used in Vision Transformer (timm.layers)"""
-
-    def __init__(
-            self,
-            in_features,
-            hidden_features=None,
-            out_features=None,
-            act_layer=nn.GELU,
-            norm_layer=None,
-            bias=True,
-            drop=0.,
-            use_conv=False,
-    ):
-        super().__init__()
-        out_features = out_features or in_features
-        hidden_features = hidden_features or in_features
-        bias = to_2tuple(bias)
-        drop_probs = to_2tuple(drop)
-        linear_layer = partial(nn.Conv2d, kernel_size=1) if use_conv else nn.Linear
-
-        self.fc1 = linear_layer(in_features, hidden_features, bias=bias[0])
-        self.act = act_layer()
-        self.drop1 = nn.Dropout(drop_probs[0])
-        self.norm = norm_layer(hidden_features) if norm_layer is not None else nn.Identity()
-        self.fc2 = linear_layer(hidden_features, out_features, bias=bias[1])
-        self.drop2 = nn.Dropout(drop_probs[1])
-
-    def forward(self, x):
-        x = self.fc1(x)
-        x = self.act(x)
-        x = self.drop1(x)
-        x = self.norm(x)
-        x = self.fc2(x)
-        x = self.drop2(x)
-        return x
+from diffusion_policy.model.diffusion.layers import Mlp
 
 
 class Attention(nn.Module):
@@ -102,6 +51,7 @@ class Attention(nn.Module):
 
 
 class AdaLNBlock(nn.Module):
+    """ Adaptive LayerNorm Transformer Block as in DiT (Peebles et al. 2022) """
     def __init__(
         self,
         dim,
@@ -216,6 +166,105 @@ class FlowTransformer(nn.Module):
 
         for block in self.transformer_blocks:
             x = block(x, t, c)
+
+        x = self.norm(x)
+        x = self.out_proj(x)
+        return x
+
+
+class FlowNetLayer(nn.Module):
+    def __init__(self, dim, mlp_ratio=4., dropout=0.0):
+        super().__init__()
+        def approx_gelu(): return nn.GELU(approximate="tanh")
+
+        self.norm = nn.LayerNorm(dim, elementwise_affine=False, eps=1e-6)
+        self.mlp = Mlp(
+            in_features=dim,
+            hidden_features=int(dim * mlp_ratio),
+            act_layer=approx_gelu,
+            drop=dropout
+        )
+
+        # Injects timestep t
+        self.time_modulator = nn.Sequential(
+            nn.SiLU(),
+            nn.Linear(dim, 3*dim)
+        )
+        self.dim = dim
+
+        self._init_weights()
+
+    def _init_weights(self):
+        nn.init.constant_(self.time_modulator[-1].weight, 0)
+        nn.init.constant_(self.time_modulator[-1].bias, 0)
+
+    def forward(self, x, t):
+        B = x.shape[0]
+        features = self.time_modulator(t).view(B, 3, self.dim).unbind(1)
+        gamma, scale, shift = features
+
+        x_norm = self.norm(x)
+        x_norm = x_norm.mul(scale.add(1)).add_(shift)
+        x = x + self.mlp(x_norm).mul_(gamma)
+
+        return x
+
+
+class SimpleFlowNet(nn.Module):
+    """ A simple flow network with only MLP layers for VITA policy (Gao et al. 2025) """
+    def __init__(
+        self,
+        input_dim,
+        hidden_dim,
+        output_dim,
+        num_layers,
+        mlp_ratio=4.0,
+        dropout=0.0,
+        time_embed_dim=256,
+    ):
+        super().__init__()
+
+        self.hidden_dim = hidden_dim
+        self.input_proj = nn.Linear(input_dim, hidden_dim)
+        self.time_embed = nn.Sequential(
+            SinusoidalPosEmb(time_embed_dim),
+            nn.Linear(time_embed_dim, time_embed_dim * 4),
+            nn.Mish(),
+            nn.Linear(time_embed_dim * 4, hidden_dim),
+        )
+
+        self.layers = nn.ModuleList([
+            FlowNetLayer(
+                dim=hidden_dim,
+                mlp_ratio=mlp_ratio,
+                dropout=dropout
+            ) for _ in range(num_layers)
+        ])
+
+        self.norm = nn.LayerNorm(hidden_dim)
+        self.out_proj = nn.Linear(hidden_dim, output_dim)
+
+        self._init_weights()
+
+    def _init_weights(self):
+        # Basic initialization
+        def _basic_init(module):
+            if isinstance(module, nn.Linear):
+                torch.nn.init.xavier_uniform_(module.weight)
+                if module.bias is not None:
+                    nn.init.constant_(module.bias, 0)
+        self.apply(_basic_init)
+
+        # Initialize timestep embedding MLP
+        nn.init.normal_(self.time_embed[1].weight, std=0.02)
+        nn.init.normal_(self.time_embed[3].weight, std=0.02)
+
+    def forward(self, x, t):
+        x = self.input_proj(x)
+        t = self.time_embed(t)
+
+        for block in self.layers:
+            x = block(x, t)
 
         x = self.norm(x)
         x = self.out_proj(x)

@@ -2,7 +2,7 @@ from typing import Dict
 
 import torch
 import torch.nn.functional as F
-from diffusion_policy.model.diffusion.flow_transformer import FlowTransformer
+from diffusion_policy.model.diffusion.flow_net import FlowTransformer
 from diffusion_policy.model.diffusion.mask_generator import LowdimMaskGenerator
 from diffusion_policy.model.vision.multi_image_obs_encoder import MultiImageObsEncoder
 from einops import reduce
@@ -139,7 +139,7 @@ class FlowMatchingDiTImagePolicy(BaseImagePolicy):
         nobs = self.normalizer.normalize(obs_dict)
         # print("!!nobs", nobs["head_cam"].shape)
         value = next(iter(nobs.values()))
-        B, To = value.shape[:2]
+        B = value.shape[0]
         T = self.horizon
         Da = self.action_dim
         Do = self.obs_feature_dim
