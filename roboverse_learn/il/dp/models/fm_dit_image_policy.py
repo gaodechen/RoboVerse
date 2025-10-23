@@ -9,7 +9,7 @@ from einops import reduce
 
 from roboverse_learn.il.utils.common.normalizer import LinearNormalizer
 from roboverse_learn.il.utils.common.pytorch_util import dict_apply
-from roboverse_learn.il.dp.models.base_image_policy import BaseImagePolicy
+from diffusion_policy.policy.base_image_policy import BaseImagePolicy
 
 
 class FlowMatchingDiTImagePolicy(BaseImagePolicy):
