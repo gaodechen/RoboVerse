@@ -216,18 +216,14 @@ def flatten_observation(states) -> torch.Tensor:
     robot_joint_pos = states.robots["franka"].joint_pos  # [num_envs, num_joints=9]
     robot_joint_vel = states.robots["franka"].joint_vel  # [num_envs, num_joints=9]
 
-    # Extract end-effector state (if needed)
-    ee_pos = states.sites["panda_hand"]["pos"]  # [num_envs, 3]
-
     # Concatenate all components into flat observation
-    # Total dim: 3 + 4 + 9 + 9 + 3 = 28
+    # Total dim: 3 + 4 + 9 + 9 = 25
     obs = torch.cat(
         [
             target_pos,  # 3
             target_quat,  # 4
             robot_joint_pos,  # 9
             robot_joint_vel,  # 9
-            ee_pos,  # 3
         ],
         dim=-1,
     )
@@ -253,13 +249,12 @@ if __name__ == "__main__":
     # Reset environment and get TensorState
     states, info = env.reset()
 
-    # Example 1: Access TensorState components directly
+    # Access TensorState components directly
     target_pos = states.objects["target"].root_state[:, 0:3]  # [2, 3]
     robot_qpos = states.robots["franka"].joint_pos  # [2, 9]
-    ee_pos = states.sites["panda_hand"]["pos"]  # [2, 3]
 
-    # Example 2: Flatten observation for RL algorithms
-    obs_flat = flatten_observation(states)  # [2, 28]
+    # Flatten observation for algorithms, get prue tensor obs
+    obs_flat = flatten_observation(states)  # [2, 25]
 
     # Run a few steps
     for i in range(10):
