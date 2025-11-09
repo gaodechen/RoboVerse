@@ -23,12 +23,3 @@ reinforcement_learning/sac.md
 reinforcement_learning/td3.md
 reinforcement_learning/skillblender_rl.md
 ```
-
-```{toctree}
-:caption: World Model
-:titlesonly:
-
-world_model/cnn_mlp.md
-world_model/vqgan_mlp.md
-world_model/diffusion_transformer.md
-```
