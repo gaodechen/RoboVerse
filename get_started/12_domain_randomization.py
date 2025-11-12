@@ -30,6 +30,7 @@ import rootutils
 rootutils.setup_root(__file__, pythonpath=True)
 
 import os
+import random
 from typing import Literal
 
 import numpy as np
@@ -217,6 +218,10 @@ def initialize_randomizers(handler, args):
         wall_height=5.0,
         table_size=(1.8, 1.8, 0.1),
         table_height=0.7,
+        floor_families=("carpet", "wood", "stone", "concrete", "architecture"),
+        wall_families=("architecture", "wall_board", "masonry", "paint", "composite"),
+        ceiling_families=("architecture", "wall_board", "wood"),
+        table_families=("wood", "stone", "plastic", "ceramic", "metal"),
     )
 
     if level < 1:
@@ -260,7 +265,7 @@ def initialize_randomizers(handler, args):
     log.info("-" * 70)
 
     box_mat = MaterialRandomizer(
-        MaterialPresets.wood_object("box_base", use_mdl=True),
+        MaterialPresets.mdl_family_object("box_base", family=("paper", "wood")),
         seed=args.seed,
     )
     box_mat.bind_handler(handler)
@@ -299,13 +304,13 @@ def initialize_randomizers(handler, args):
             enabled=True,
         ),
         position=LightPositionRandomCfg(
-            position_range=((-2.0, 2.0), (-2.0, 2.0), (-0.5, 0.5)),
+            position_range=((-1.0, 1.0), (-1.0, 1.0), (-0.2, 0.2)),
             relative_to_origin=True,
             distribution="uniform",
             enabled=True,
         ),
         orientation=LightOrientationRandomCfg(
-            angle_range=((-30.0, 30.0), (-30.0, 30.0), (-180.0, 180.0)),
+            angle_range=((-20.0, 20.0), (-20.0, 20.0), (-180.0, 180.0)),
             relative_to_origin=True,
             distribution="uniform",
             enabled=True,
@@ -331,7 +336,7 @@ def initialize_randomizers(handler, args):
                 enabled=True,
             ),
             position=LightPositionRandomCfg(
-                position_range=((-1.5, 1.5), (-1.5, 1.5), (-0.5, 0.5)),
+                position_range=((-0.5, 0.5), (-0.5, 0.5), (-0.2, 0.2)),
                 relative_to_origin=True,
                 distribution="uniform",
                 enabled=True,
@@ -362,26 +367,52 @@ def initialize_randomizers(handler, args):
     return randomizers
 
 
-def apply_randomization(randomizers, level):
-    """Apply all active randomizers."""
-    if randomizers["scene"]:
-        randomizers["scene"]()
+def apply_randomization(randomizers, level, handler) -> None:
+    """Apply all randomizers simultaneously with deferred visual flush.
 
+    Ensures all randomizations (scene, object, material, light, camera) are
+    applied atomically before flushing visuals, preventing intermediate states
+    from being captured in video recordings.
+    """
+    # Temporarily disable auto-flush in scene randomizer
+    scene_rand = randomizers["scene"]
+    if scene_rand:
+        original_auto_flush = scene_rand.cfg.auto_flush_visuals
+        scene_rand.cfg.auto_flush_visuals = False
+        scene_rand()
+        scene_rand.cfg.auto_flush_visuals = original_auto_flush
+
+    # Apply object randomization
     if level >= 0:
         for rand in randomizers["object"]:
             rand()
 
+    # Apply material randomization with deferred flush
     if level >= 1:
         for rand in randomizers["material"]:
+            if hasattr(rand, "_defer_visual_flush"):
+                rand._defer_visual_flush = True
             rand()
+            if hasattr(rand, "_defer_visual_flush"):
+                rand._defer_visual_flush = False
 
+    # Apply light randomization
     if level >= 2:
         for rand in randomizers["light"]:
             rand()
 
+    # Apply camera randomization
     if level >= 3:
         for rand in randomizers["camera"]:
             rand()
+
+    # Single comprehensive flush after all randomizations complete
+    flush_fn = getattr(handler, "flush_visual_updates", None)
+    if callable(flush_fn):
+        try:
+            flush_fn(wait_for_materials=True, settle_passes=3)
+        except Exception as e:
+            log.debug(f"Failed to flush visual updates: {e}")
 
 
 def get_states(all_states, action_idx: int, num_envs: int):
@@ -394,7 +425,10 @@ def get_states(all_states, action_idx: int, num_envs: int):
 def run_replay_with_randomization(env, randomizers, init_state, all_actions, all_states, args):
     """Replay trajectory with periodic randomization."""
     os.makedirs("get_started/output", exist_ok=True)
-    video_path = f"get_started/output/12_dr_level{args.level}_{args.sim}.mp4"
+
+    mode_tag = "states" if args.object_states else f"level{args.level}"
+    video_path = f"get_started/output/12_dr_{mode_tag}_{args.sim}.mp4"
+
     obs_saver = ObsSaver(video_path=video_path)
 
     log.info("\n" + "=" * 70)
@@ -406,19 +440,38 @@ def run_replay_with_randomization(env, randomizers, init_state, all_actions, all
     traj_length = len(all_actions[0]) if all_actions else (len(all_states[0]) if all_states else 0)
     log.info(f"Trajectory length: {traj_length} steps")
 
-    apply_randomization(randomizers, args.level)
+    randomization_enabled = not args.object_states
+    if randomization_enabled:
+        apply_randomization(randomizers, args.level, env.handler)
+
     obs, extras = env.reset(states=[init_state] * args.num_envs)
 
     step = 0
     num_envs = env.scenario.num_envs
 
     while True:
-        if step % args.randomize_interval == 0 and step > 0:
+        if randomization_enabled and step % args.randomize_interval == 0 and step > 0:
             log.info(f"Step {step}: Applying randomizations")
-            apply_randomization(randomizers, args.level)
+            apply_randomization(randomizers, args.level, env.handler)
 
-        actions = get_actions(all_actions, step, num_envs)
-        obs, reward, success, time_out, extras = env.step(actions)
+        if args.object_states:
+            if all_states is None:
+                raise ValueError("State playback requested but no states were loaded from trajectory")
+
+            states = get_states(all_states, step, num_envs)
+            env.handler.set_states(states, env_ids=list(range(num_envs)))
+            env.handler.refresh_render()
+            obs = env.handler.get_states()
+
+            if hasattr(env, "checker"):
+                success = env.checker.check(env.handler, obs)
+            else:
+                success = torch.zeros(num_envs, dtype=torch.bool)
+
+            time_out = torch.zeros_like(success)
+        else:
+            actions = get_actions(all_actions, step, num_envs)
+            obs, reward, success, time_out, extras = env.step(actions)
 
         if success.any():
             log.info(f"Env {success.nonzero().squeeze(-1).tolist()} succeeded")
@@ -432,9 +485,14 @@ def run_replay_with_randomization(env, randomizers, init_state, all_actions, all
 
         obs_saver.add(obs)
 
-        if get_runout(all_actions, step + 1):
-            log.info("Trajectory ended")
-            break
+        if args.object_states:
+            if get_runout(all_states, step + 1):
+                log.info("Trajectory ended")
+                break
+        else:
+            if get_runout(all_actions, step + 1):
+                log.info("Trajectory ended")
+                break
 
         step += 1
 
@@ -475,10 +533,12 @@ def main():
     args = tyro.cli(Args)
 
     if args.seed is not None:
+        random.seed(args.seed)
         torch.manual_seed(args.seed)
         np.random.seed(args.seed)
         if torch.cuda.is_available():
             torch.cuda.manual_seed(args.seed)
+            torch.cuda.manual_seed_all(args.seed)
 
     log.info("=" * 70)
     log.info("Domain Randomization Demo with Trajectory Replay")

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import random
 from typing import Any, Literal
 
 import torch
@@ -104,18 +103,12 @@ class ObjectRandomizer(BaseRandomizerType):
     """
 
     def __init__(self, cfg: ObjectRandomCfg, seed: int | None = None):
-        super().__init__()
         self.cfg = cfg
+        super().__init__(seed=seed)
 
-        # Set up reproducible random state
-        if seed is not None:
-            # Use provided seed + simple string-to-number conversion for uniqueness
-            name_sum = sum(ord(c) for c in cfg.obj_name)
-            self._seed = seed + name_sum
-        else:
-            self._seed = random.randint(0, 2**32 - 1)
-
-        self._rng = random.Random(self._seed)
+    def set_seed(self, seed: int | None) -> None:
+        """Set or update RNG seed."""
+        super().set_seed(seed)
 
     def _generate_random_tensor(
         self, shape: tuple[int, ...], distribution: str, range_vals: tuple[float, float]
@@ -179,7 +172,7 @@ class ObjectRandomizer(BaseRandomizerType):
     def _get_body_names(self, obj_name: str) -> list[str]:
         """Get body names for an object."""
         if hasattr(self.handler, "_get_body_names"):
-            return self._get_body_names(obj_name)
+            return self.handler._get_body_names(obj_name)
         else:
             # Fallback implementation
             if obj_name in self.handler.scene.articulations:
@@ -625,8 +618,17 @@ class ObjectRandomizer(BaseRandomizerType):
 
     def __call__(self) -> None:
         """Execute object randomization based on configuration."""
-        self.randomize_physics()
-        self.randomize_pose()
+        pose_updated = False
+
+        if self.cfg.physics.enabled:
+            self.randomize_physics()
+
+        if self.cfg.pose.enabled:
+            self.randomize_pose()
+            pose_updated = True
+
+        if pose_updated:
+            self._mark_visual_dirty()
 
     # Getter methods for backward compatibility and debugging
     def get_properties(self) -> dict[str, Any]:

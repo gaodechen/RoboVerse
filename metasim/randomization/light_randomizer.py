@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import dataclasses
-import random
 from typing import Any, Literal
 
 import torch
@@ -128,18 +127,12 @@ class LightRandomizer(BaseRandomizerType):
     """
 
     def __init__(self, cfg: LightRandomCfg, seed: int | None = None):
-        super().__init__()
         self.cfg = cfg
+        super().__init__(seed=seed)
 
-        # Set up reproducible random state - simple and direct
-        if seed is not None:
-            # Use provided seed + simple string-to-number conversion for uniqueness
-            name_sum = sum(ord(c) for c in cfg.light_name)
-            self._seed = seed + name_sum
-        else:
-            self._seed = random.randint(0, 2**32 - 1)
-
-        self._rng = random.Random(self._seed)
+    def set_seed(self, seed: int | None) -> None:
+        """Set or update RNG seed."""
+        super().set_seed(seed)
 
     def bind_handler(self, handler, *args: Any, **kwargs):
         """Bind the handler to the randomizer."""
@@ -503,31 +496,39 @@ class LightRandomizer(BaseRandomizerType):
 
     def __call__(self) -> None:
         """Execute light randomization based on configuration."""
+        did_update = False
         try:
             enabled_types = self._get_enabled_light_types()
             if not enabled_types:
                 return
 
             if self.cfg.randomization_mode == "combined":
-                self._apply_combined_randomization(enabled_types)
+                did_update = self._apply_combined_randomization(enabled_types)
             elif self.cfg.randomization_mode == "intensity_only":
                 if "intensity" in enabled_types:
                     self.randomize_intensity()
+                    did_update = True
             elif self.cfg.randomization_mode == "color_only":
                 if "color" in enabled_types:
                     self.randomize_color()
+                    did_update = True
             elif self.cfg.randomization_mode == "position_only":
                 if "position" in enabled_types:
                     self.randomize_position()
+                    did_update = True
             elif self.cfg.randomization_mode == "orientation_only":
                 if "orientation" in enabled_types:
                     self.randomize_orientation()
+                    did_update = True
             else:
                 raise ValueError(f"Unknown randomization mode: {self.cfg.randomization_mode}")
 
         except Exception as e:
             logger.error(f"Light randomization failed for {self.cfg.light_name}: {e}")
             raise
+        else:
+            if did_update:
+                self._mark_visual_dirty()
 
     def _get_enabled_light_types(self) -> list[str]:
         """Get list of enabled light randomization types."""
@@ -542,13 +543,20 @@ class LightRandomizer(BaseRandomizerType):
             enabled.append("orientation")
         return enabled
 
-    def _apply_combined_randomization(self, enabled_types: list[str]) -> None:
+    def _apply_combined_randomization(self, enabled_types: list[str]) -> bool:
         """Apply all enabled randomization types."""
+        updated = False
         if "intensity" in enabled_types:
             self.randomize_intensity()
+            updated = True
         if "color" in enabled_types:
             self.randomize_color()
+            updated = True
         if "position" in enabled_types:
             self.randomize_position()
+            updated = True
         if "orientation" in enabled_types:
             self.randomize_orientation()
+            updated = True
+
+        return updated

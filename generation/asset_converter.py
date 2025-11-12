@@ -4,11 +4,13 @@ import logging
 import os
 import xml.etree.ElementTree as ET
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from shutil import copy
+from glob import glob
+from shutil import copy, rmtree
 
 import trimesh
 from scipy.spatial.transform import Rotation
+
+from generation.enums import AssetType
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -16,21 +18,10 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
     "AssetConverterFactory",
-    "AssetType",
     "MeshtoMJCFConverter",
     "MeshtoUSDConverter",
     "URDFtoUSDConverter",
 ]
-
-
-@dataclass
-class AssetType(str):
-    """Asset type enumeration."""
-
-    MJCF = "mjcf"
-    USD = "usd"
-    URDF = "urdf"
-    MESH = "mesh"
 
 
 class AssetConverterBase(ABC):
@@ -42,14 +33,21 @@ class AssetConverterBase(ABC):
 
     def transform_mesh(self, input_mesh: str, output_mesh: str, mesh_origin: ET.Element) -> None:
         """Apply transform to the mesh based on the origin element in URDF."""
-        mesh = trimesh.load(input_mesh)
+        mesh = trimesh.load(input_mesh, group_material=False)
         rpy = list(map(float, mesh_origin.get("rpy").split(" ")))
         rotation = Rotation.from_euler("xyz", rpy, degrees=False)
         offset = list(map(float, mesh_origin.get("xyz").split(" ")))
-        mesh.vertices = (mesh.vertices @ rotation.as_matrix().T) + offset
-
         os.makedirs(os.path.dirname(output_mesh), exist_ok=True)
-        _ = mesh.export(output_mesh)
+
+        if isinstance(mesh, trimesh.Scene):
+            combined = trimesh.Scene()
+            for mesh_part in mesh.geometry.values():
+                mesh_part.vertices = (mesh_part.vertices @ rotation.as_matrix().T) + offset
+                combined.add_geometry(mesh_part)
+            _ = combined.export(output_mesh)
+        else:
+            mesh.vertices = (mesh.vertices @ rotation.as_matrix().T) + offset
+            _ = mesh.export(output_mesh)
 
         return
 
@@ -93,29 +91,46 @@ class MeshtoMJCFConverter(AssetConverterBase):
         mesh = geometry.find("mesh")
         filename = mesh.get("filename")
         scale = mesh.get("scale", "1.0 1.0 1.0")
-
-        mesh_asset = ET.SubElement(mujoco_element, "mesh", name=mesh_name, file=filename, scale=scale)
-        geom = ET.SubElement(body, "geom", type="mesh", mesh=mesh_name)
-
-        self._copy_asset_file(
-            f"{input_dir}/{filename}",
-            f"{output_dir}/{filename}",
-        )
-
-        # Preprocess the mesh by applying rotation.
         input_mesh = f"{input_dir}/{filename}"
         output_mesh = f"{output_dir}/{filename}"
+        self._copy_asset_file(input_mesh, output_mesh)
+
         mesh_origin = element.find("origin")
         if mesh_origin is not None:
             self.transform_mesh(input_mesh, output_mesh, mesh_origin)
 
-        if material is not None:
-            geom.set("material", material.get("name"))
-
         if is_collision:
-            geom.set("contype", "1")
-            geom.set("conaffinity", "1")
-            geom.set("rgba", "1 1 1 0")
+            mesh_parts = trimesh.load(output_mesh, group_material=False, force="scene")
+            mesh_parts = mesh_parts.geometry.values()
+        else:
+            mesh_parts = [trimesh.load(output_mesh, force="mesh")]
+        for idx, mesh_part in enumerate(mesh_parts):
+            if is_collision:
+                idx_mesh_name = f"{mesh_name}_{idx}"
+                base, ext = os.path.splitext(filename)
+                idx_filename = f"{base}_{idx}{ext}"
+                base_outdir = os.path.dirname(output_mesh)
+                mesh_part.export(os.path.join(base_outdir, "..", idx_filename))
+                geom_attrs = {
+                    "contype": "1",
+                    "conaffinity": "1",
+                    "rgba": "1 1 1 0",
+                }
+            else:
+                idx_mesh_name, idx_filename = mesh_name, filename
+                geom_attrs = {"contype": "0", "conaffinity": "0"}
+
+            ET.SubElement(
+                mujoco_element,
+                "mesh",
+                name=idx_mesh_name,
+                file=idx_filename,
+                scale=scale,
+            )
+            geom = ET.SubElement(body, "geom", type="mesh", mesh=idx_mesh_name)
+            geom.attrib.update(geom_attrs)
+            if material is not None:
+                geom.set("material", material.get("name"))
 
     def add_materials(
         self,
@@ -133,26 +148,36 @@ class MeshtoMJCFConverter(AssetConverterBase):
         mesh = geometry.find("mesh")
         filename = mesh.get("filename")
         dirname = os.path.dirname(filename)
+        material = None
+        for path in glob(f"{input_dir}/{dirname}/*.png"):
+            file_name = os.path.basename(path)
+            if "keep_materials" in self.kwargs:
+                find_flag = False
+                for keep_key in self.kwargs["keep_materials"]:
+                    if keep_key in file_name.lower():
+                        find_flag = True
+                if find_flag is False:
+                    continue
 
-        material = ET.SubElement(
-            mujoco_element,
-            "material",
-            name=f"material_{name}",
-            texture=f"texture_{name}",
-            reflectance=str(reflectance),
-        )
-        ET.SubElement(
-            mujoco_element,
-            "texture",
-            name=f"texture_{name}",
-            type="2d",
-            file=f"{dirname}/material_0.png",
-        )
-
-        self._copy_asset_file(
-            f"{input_dir}/{dirname}/material_0.png",
-            f"{output_dir}/{dirname}/material_0.png",
-        )
+            self._copy_asset_file(
+                path,
+                f"{output_dir}/{dirname}/{file_name}",
+            )
+            texture_name = f"texture_{name}_{os.path.splitext(file_name)[0]}"
+            material = ET.SubElement(
+                mujoco_element,
+                "material",
+                name=f"material_{name}",
+                texture=texture_name,
+                reflectance=str(reflectance),
+            )
+            ET.SubElement(
+                mujoco_element,
+                "texture",
+                name=texture_name,
+                type="2d",
+                file=f"{dirname}/{file_name}",
+            )
 
         return material
 
@@ -181,6 +206,7 @@ class MeshtoMJCFConverter(AssetConverterBase):
                 output_dir,
                 name=str(idx),
             )
+            joint = ET.SubElement(body, "joint", attrib={"type": "free"})
             self.add_geometry(
                 mujoco_asset,
                 link,
@@ -215,6 +241,7 @@ class MeshtoUSDConverter(AssetConverterBase):
     DEFAULT_BIND_APIS = [
         "MaterialBindingAPI",
         "PhysicsMeshCollisionAPI",
+        "PhysxConvexDecompositionCollisionAPI",
         "PhysicsCollisionAPI",
         "PhysxCollisionAPI",
         "PhysicsMassAPI",
@@ -229,36 +256,46 @@ class MeshtoUSDConverter(AssetConverterBase):
         simulation_app=None,
         **kwargs,
     ):
+        if simulation_app is not None:
+            self.simulation_app = simulation_app
+
+        if "exit_close" in kwargs:
+            self.exit_close = kwargs.pop("exit_close")
+        else:
+            self.exit_close = True
+
         self.usd_parms = dict(
             force_usd_conversion=force_usd_conversion,
             make_instanceable=make_instanceable,
             **kwargs,
         )
-        if simulation_app is not None:
-            self.simulation_app = simulation_app
 
     def __enter__(self):
         from isaaclab.app import AppLauncher
 
         if not hasattr(self, "simulation_app"):
-            launch_args = dict(
-                headless=True,
-                no_splash=True,
-                fast_shutdown=True,
-                disable_gpu=True,
-            )
+            if "launch_args" not in self.usd_parms:
+                launch_args = dict(
+                    headless=True,
+                    no_splash=True,
+                    fast_shutdown=True,
+                    disable_gpu=True,
+                )
+            else:
+                launch_args = self.usd_parms.pop("launch_args")
             self.app_launcher = AppLauncher(launch_args)
             self.simulation_app = self.app_launcher.app
 
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit, closes simulation app if created."""
         # Close the simulation app if it was created here
-        if hasattr(self, "app_launcher"):
-            self.simulation_app.close()
-
         if exc_val is not None:
             logger.error(f"Exception occurred: {exc_val}.")
+
+        if hasattr(self, "app_launcher") and self.exit_close:
+            self.simulation_app.close()
 
         return False
 
@@ -285,6 +322,7 @@ class MeshtoUSDConverter(AssetConverterBase):
         )
         urdf_converter = MeshConverter(cfg)
         usd_path = urdf_converter.usd_path
+        rmtree(os.path.dirname(output_mesh))
 
         stage = Usd.Stage.Open(usd_path)
         layer = stage.GetRootLayer()
@@ -299,12 +337,14 @@ class MeshtoUSDConverter(AssetConverterBase):
 
                 # Add convex decomposition collision and set ShrinkWrap.
                 elif prim.GetName() == "mesh":
-                    approx_attr = prim.GetAttribute("physics:approximation")
-                    if not approx_attr:
-                        approx_attr = prim.CreateAttribute("physics:approximation", Sdf.ValueTypeNames.Token)
+                    approx_attr = prim.CreateAttribute("physics:approximation", Sdf.ValueTypeNames.Token)
                     approx_attr.Set("convexDecomposition")
 
                     physx_conv_api = PhysxSchema.PhysxConvexDecompositionCollisionAPI.Apply(prim)
+
+                    physx_conv_api.GetMaxConvexHullsAttr().Set(32)
+                    physx_conv_api.GetHullVertexLimitAttr().Set(16)
+                    physx_conv_api.GetVoxelResolutionAttr().Set(10000)
                     physx_conv_api.GetShrinkWrapAttr().Set(True)
 
                     api_schemas = prim.GetMetadata("apiSchemas")
@@ -379,12 +419,13 @@ class URDFtoUSDConverter(MeshtoUSDConverter):
         with Usd.EditContext(stage, layer):
             for prim in stage.Traverse():
                 if prim.GetName() == "collisions":
-                    approx_attr = prim.GetAttribute("physics:approximation")
-                    if not approx_attr:
-                        approx_attr = prim.CreateAttribute("physics:approximation", Sdf.ValueTypeNames.Token)
+                    approx_attr = prim.CreateAttribute("physics:approximation", Sdf.ValueTypeNames.Token)
                     approx_attr.Set("convexDecomposition")
 
                     physx_conv_api = PhysxSchema.PhysxConvexDecompositionCollisionAPI.Apply(prim)
+                    physx_conv_api.GetMaxConvexHullsAttr().Set(32)
+                    physx_conv_api.GetHullVertexLimitAttr().Set(16)
+                    physx_conv_api.GetVoxelResolutionAttr().Set(10000)
                     physx_conv_api.GetShrinkWrapAttr().Set(True)
 
                     api_schemas = prim.GetMetadata("apiSchemas")
@@ -416,12 +457,12 @@ class AssetConverterFactory:
     @staticmethod
     def create(target_type: AssetType, source_type: AssetType = "urdf", **kwargs) -> AssetConverterBase:
         """Create an asset converter instance based on target and source types."""
-        if target_type == AssetType.MJCF and source_type == AssetType.URDF:
+        if target_type == AssetType.MJCF and source_type == AssetType.MESH:
             converter = MeshtoMJCFConverter(**kwargs)
-        elif target_type == AssetType.USD and source_type == AssetType.URDF:
-            converter = URDFtoUSDConverter(**kwargs)
         elif target_type == AssetType.USD and source_type == AssetType.MESH:
             converter = MeshtoUSDConverter(**kwargs)
+        elif target_type == AssetType.USD and source_type == AssetType.URDF:
+            converter = URDFtoUSDConverter(**kwargs)
         else:
             raise ValueError(f"Unsupported converter type: {source_type} -> {target_type}.")
 

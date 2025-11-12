@@ -135,19 +135,47 @@ class ObsSaver:
 def main():
     task_cls = get_task_class(args.task)
     camera = PinholeCameraCfg(pos=(1.5, -1.5, 1.5), look_at=(0.0, 0.0, 0.0))
-    scenario = task_cls.scenario.update(
-        robots=[args.robot],
-        scene=args.scene,
-        cameras=[camera],
-        # random=args.random,
-        render=args.render,
-        simulator=args.sim,
-        renderer=args.renderer,
-        num_envs=args.num_envs,
-        headless=args.headless,
-    )
+
+    if args.robot == "None":
+        scenario = task_cls.scenario.update(
+            # robots=[args.robot],
+            scene=args.scene,
+            cameras=[camera],
+            # random=args.random,
+            render=args.render,
+            simulator=args.sim,
+            renderer=args.renderer,
+            num_envs=args.num_envs,
+            headless=args.headless,
+        )
+
+    else:
+        scenario = task_cls.scenario.update(
+            robots=[args.robot],
+            scene=args.scene,
+            cameras=[camera],
+            # random=args.random,
+            render=args.render,
+            simulator=args.sim,
+            renderer=args.renderer,
+            num_envs=args.num_envs,
+            headless=args.headless,
+        )
 
     num_envs: int = scenario.num_envs
+
+    if args.sim == "isaacsim":
+        scenario.update(decimation=2)
+        if scenario.robots[0].name == "franka":
+            # use smaller stiffness and damping for fingers for fine-grained control
+            from metasim.scenario.robot import BaseActuatorCfg
+
+            scenario.robots[0].actuators["panda_finger_joint1"] = BaseActuatorCfg(
+                stiffness=50, damping=15, velocity_limit=0.2, is_ee=True
+            )
+            scenario.robots[0].actuators["panda_finger_joint2"] = BaseActuatorCfg(
+                stiffness=50, damping=15, velocity_limit=0.2, is_ee=True
+            )
 
     tic = time.time()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

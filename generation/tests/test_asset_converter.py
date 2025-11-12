@@ -1,6 +1,12 @@
+import os
+import sys
+
 import pytest
 from huggingface_hub import snapshot_download
 
+current_file_path = os.path.abspath(__file__)
+current_dir = os.path.dirname(current_file_path)
+sys.path.append(os.path.join(current_dir, "../.."))
 from generation.asset_converter import AssetConverterFactory, AssetType
 
 
@@ -13,7 +19,6 @@ def data_dir(tmp_path_factory):
         repo_type="dataset",
         local_dir=str(data_dir),
         allow_patterns="demo_assets/remote_control/*",
-        local_dir_use_symlinks=False,
     )
     return data_dir
 
@@ -26,7 +31,7 @@ def test_MeshtoMJCFConverter(data_dir):
     output_file = data_dir / "demo_assets/remote_control/mjcf/remote_control.mjcf"
     asset_converter = AssetConverterFactory.create(
         target_type=AssetType.MJCF,
-        source_type=AssetType.URDF,
+        source_type=AssetType.MESH,
     )
 
     with asset_converter:
