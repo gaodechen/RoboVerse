@@ -1,4 +1,9 @@
-task_name=close_box
+
+## Seperate training and evaluation
+train_enable=True
+eval_enable=True
+
+task_name_set=close_box
 level=0
 config_name=dp_runner
 num_epochs=100              # Number of training epochs
@@ -14,9 +19,6 @@ expert_data_num=100
 sim_set=mujoco
 eval_ckpt_name=100          # Checkpoint epoch to evaluate
 
-## Seperate training and evaluation
-train_enable=True
-eval_enable=True
 
 ## Choose training or inference algorithm
 # Supported models:
@@ -33,15 +35,15 @@ if [ "${delta_ee}" = 1 ]; then
 fi
 
 python ./roboverse_learn/il/dp/main.py --config-name=${config_name}.yaml \
-task_name="${task_name}" \
-dataset_config.zarr_path="./data_policy/${task_name}FrankaL${level}_${extra}_${expert_data_num}.zarr" \
+task_name=${task_name_set} \
+dataset_config.zarr_path="./data_policy/${task_name_set}FrankaL${level}_${extra}_${expert_data_num}.zarr" \
 train_config.training_params.seed=${seed} \
 train_config.training_params.num_epochs=${num_epochs} \
 train_config.training_params.device=${gpu} \
 eval_config.policy_runner.obs.obs_type=${obs_space} \
 eval_config.policy_runner.action.action_type=${act_space} \
 eval_config.policy_runner.action.delta=${delta_ee} \
-eval_config.eval_args.task=${task_name} \
+eval_config.eval_args.task=${task_name_set} \
 eval_config.eval_args.max_step=${eval_max_step} \
 eval_config.eval_args.num_envs=${eval_num_envs} \
 eval_config.eval_args.sim=${sim_set} \
