@@ -17,14 +17,14 @@ eval_num_envs=1
 eval_max_step=500
 expert_data_num=100
 sim_set=mujoco
-eval_ckpt_name=100          # Checkpoint epoch to evaluate
+eval_ckpt_name=100
 
 
 ## Choose training or inference algorithm
 # Supported models:
 #   "ddpm_unet_model", "ddpm_dit_model", "ddim_unet_model", "fm_unet_model", "fm_dit_model", "score_model", "vita_model"
 export algo_model="ddpm_dit_model"
-eval_path="./info/outputs/DP/${task_name}/checkpoints/${eval_ckpt_name}.ckpt"
+eval_path="./info/outputs/DP/${task_name_set}/checkpoints/${eval_ckpt_name}.ckpt"
 
 echo "Selected model: $algo_model"
 echo "Checkpoint path: $eval_path"
