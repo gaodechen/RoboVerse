@@ -29,6 +29,24 @@ pip install yourdfpy trimesh
 
 ## Quick Start
 
+### Replay Pre-recorded Task Demo (Recommended)
+
+The easiest way to get started - replay existing task trajectories without needing GPU or IK solvers:
+
+```bash
+# Replay stack_cube task
+python get_started/rerun/replay_task_demo.py --task stack_cube --sim mujoco --output stack_cube.rrd
+
+# Replay close_box task
+python get_started/rerun/replay_task_demo.py --task close_box --sim mujoco --output close_box.rrd
+
+# With live viewer during recording
+python get_started/rerun/replay_task_demo.py --task stack_cube --sim mujoco --spawn-viewer --output stack_cube.rrd
+
+# View the saved recording
+rerun stack_cube.rrd
+```
+
 ### Basic Static Scene
 
 ```bash
@@ -233,6 +251,7 @@ visualizer = RerunVisualizer(spawn=False, connect=True)
 
 ## Files
 
+- **`replay_task_demo.py`**: Replay pre-recorded task trajectories (CPU-only, no IK solver needed)
 - **`rerun_demo.py`**: Main demo script with static and dynamic visualization
 - **`save_trajectory.py`**: Save trajectory recording with IK solver (requires GPU)
 - **`save_trajectory_simple.py`**: Save trajectory recording without IK solver (CPU-only, Mac compatible)
