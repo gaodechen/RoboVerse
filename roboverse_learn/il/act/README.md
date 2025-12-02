@@ -2,7 +2,7 @@
 
 ## 1. Install
 ```bash
-cd roboverse_learn/il/utils/act/detr && pip install -e .
+cd roboverse_learn/il/act/detr && pip install -e .
 
 cd ../../../../../
 ```

@@ -18,6 +18,7 @@ from .position_encoding import build_position_encoding
 import IPython
 e = IPython.embed
 
+
 class FrozenBatchNorm2d(torch.nn.Module):
     """
     BatchNorm2d where the batch statistics and the affine parameters are fixed.
@@ -72,27 +73,20 @@ class BackboneBase(nn.Module):
         self.num_channels = num_channels
 
     def forward(self, tensor):
-        print(f"[BackBone]: tensor shape: {tensor.shape}")
         xs = self.body(tensor)
         return xs
-        # out: Dict[str, NestedTensor] = {}
-        # for name, x in xs.items():
-        #     m = tensor_list.mask
-        #     assert m is not None
-        #     mask = F.interpolate(m[None].float(), size=x.shape[-2:]).to(torch.bool)[0]
-        #     out[name] = NestedTensor(x, mask)
-        # return out
 
 
 class Backbone(BackboneBase):
     """ResNet backbone with frozen BatchNorm."""
+
     def __init__(self, name: str,
                  train_backbone: bool,
                  return_interm_layers: bool,
                  dilation: bool):
         backbone = getattr(torchvision.models, name)(
             replace_stride_with_dilation=[False, False, dilation],
-            pretrained=is_main_process(), norm_layer=FrozenBatchNorm2d) # pretrained # TODO do we want frozen batch_norm??
+            pretrained=is_main_process(), norm_layer=FrozenBatchNorm2d)  # pretrained # TODO do we want frozen batch_norm??
         num_channels = 512 if name in ('resnet18', 'resnet34') else 2048
         super().__init__(backbone, train_backbone, num_channels, return_interm_layers)
 

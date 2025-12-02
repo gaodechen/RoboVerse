@@ -8,7 +8,7 @@ pip install -e .
 # Install act
 echo "Install act..."
 cd ../../../../
-cd roboverse_learn/il/utils/act/detr || { echo "detr do not exit"; exit 1; }
+cd roboverse_learn/il/act/detr || { echo "detr do not exit"; exit 1; }
 pip install -e .
 
 # Install additional dependencies

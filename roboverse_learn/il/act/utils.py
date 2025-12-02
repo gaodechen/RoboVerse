@@ -6,10 +6,7 @@ import torch
 import h5py
 import json
 from torch.utils.data import TensorDataset, DataLoader
-from PIL import Image
-module_path = os.path.abspath(os.path.join(__file__, "../../diffusion_policy/diffusion_policy/common"))
-sys.path.append(module_path)
-from replay_buffer import *
+from roboverse_learn.il.utils.common.replay_buffer import ReplayBuffer
 
 import IPython
 e = IPython.embed
@@ -159,6 +156,11 @@ def get_norm_stats(dataset_dir, num_episodes):
         zarr_path,
         keys=["state", "action"]
     )
+    actual_episodes = replay_buffer.n_episodes
+    if num_episodes > actual_episodes:
+        print(f"Warning: Requested {num_episodes} episodes, but dataset only has {actual_episodes}")
+        print(f"Using all {actual_episodes} available episodes")
+        num_episodes = actual_episodes
 
     # Calculate max episode length
     max_episode_len = int(np.max(replay_buffer.episode_lengths))
@@ -168,7 +170,7 @@ def get_norm_stats(dataset_dir, num_episodes):
     all_action_data = []
 
     # Process each episode up to num_episodes
-    for episode_idx in range(min(num_episodes, replay_buffer.n_episodes)):
+    for episode_idx in range(num_episodes):
         episode_slice = replay_buffer.get_episode_slice(episode_idx)
         state = replay_buffer["state"][episode_slice]
         action = replay_buffer["action"][episode_slice]
@@ -198,20 +200,21 @@ def get_norm_stats(dataset_dir, num_episodes):
         "max_episode_len": max_episode_len
     }
 
-    return stats
+    return stats, num_episodes
 
 
 
 def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_size_val):
     print(f'\nData from: {dataset_dir}\n')
+    
+    norm_stats, num_episodes = get_norm_stats(dataset_dir, num_episodes)
+    
     # obtain train test split
     train_ratio = 0.8
     shuffled_indices = np.random.permutation(num_episodes)
     train_indices = shuffled_indices[:int(train_ratio * num_episodes)]
     val_indices = shuffled_indices[int(train_ratio * num_episodes):]
 
-    # obtain normalization stats for state and action
-    norm_stats = get_norm_stats(dataset_dir, num_episodes)
     # construct dataset and dataloader
     train_dataset = ZarrEpisodicRoboVerseDataset(train_indices, dataset_dir, camera_names, norm_stats)
     val_dataset = ZarrEpisodicRoboVerseDataset(val_indices, dataset_dir, camera_names, norm_stats)

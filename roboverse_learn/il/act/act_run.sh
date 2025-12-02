@@ -35,7 +35,7 @@ fi
 if [ "${train_enable}" = "true" ]; then
   echo "=== Training ==="
   export CUDA_VISIBLE_DEVICES=${gpu_id}
-  python -m roboverse_learn.il.utils.act.train \
+  python -m roboverse_learn.il.act.train \
   --task_name ${task_name_set}_${extra}_chunk${chunk_size} \
   --num_episodes ${expert_data_num} \
   --dataset_dir data_policy/${task_name_set}FrankaL${level}_${extra}_${expert_data_num}.zarr \

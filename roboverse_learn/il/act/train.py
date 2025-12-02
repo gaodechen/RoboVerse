@@ -8,10 +8,7 @@ import yaml
 import json
 from copy import deepcopy
 from tqdm import tqdm
-from einops import rearrange
 
-from .constants import DT
-from .constants import PUPPET_GRIPPER_JOINT_OPEN
 from .utils import load_data  # data functions
 from .utils import compute_dict_mean, set_seed, detach_dict  # helper functions
 from .policy import ACTPolicy, CNNMLPPolicy
@@ -86,7 +83,13 @@ def main(args):
         'data': dataset_metadata,  # Add the dataset metadata to config
     }
 
-    train_dataloader, val_dataloader, stats, _ = load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_size_val)
+    train_dataloader, val_dataloader, stats, _ = load_data(
+        dataset_dir,
+        num_episodes,
+        camera_names,
+        batch_size_train,
+        batch_size_val
+    )
 
     # save dataset stats
     if not os.path.isdir(ckpt_dir):
@@ -174,22 +177,6 @@ def train_bc(train_dataloader, val_dataloader, config):
         for k, v in epoch_summary.items():
             summary_string += f'{k}: {v.item():.3f} '
         print(summary_string)
-
-        # training
-
-        # policy.train()
-        # optimizer.zero_grad()
-        # for batch_idx, data in enumerate(train_dataloader):
-        #     forward_dict = forward_pass(data, policy)
-        #     # backward
-        #     loss = forward_dict['loss']
-        #     loss.backward()
-        #     optimizer.step()
-        #     optimizer.zero_grad()
-        #     train_history.append(detach_dict(forward_dict))
-        # epoch_summary = compute_dict_mean(train_history[(batch_idx+1)*epoch:(batch_idx+1)*(epoch+1)])
-        # epoch_train_loss = epoch_summary['loss']
-        # print(f'Train loss: {epoch_train_loss:.5f}')
 
         policy.train()
         optimizer.zero_grad()

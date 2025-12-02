@@ -3,7 +3,7 @@
 train_enable=True  # True for training, False for evaluation
 eval_enable=True
 
-task_name_set=stack_cube
+task_name_set=close_box
 level=0
 config_name=dp_runner
 num_epochs=100              # Number of training epochs
@@ -15,9 +15,9 @@ act_space=joint_pos
 delta_ee=0
 eval_num_envs=1
 eval_max_step=300
-expert_data_num=100
-sim_set=isaacsim
-eval_ckpt_name=100
+expert_data_num=90
+sim_set=mujoco
+eval_ckpt_name=90
 
 
 ## Choose training or inference algorithm
