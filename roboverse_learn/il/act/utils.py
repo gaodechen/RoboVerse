@@ -206,9 +206,9 @@ def get_norm_stats(dataset_dir, num_episodes):
 
 def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_size_val):
     print(f'\nData from: {dataset_dir}\n')
-    
+
     norm_stats, num_episodes = get_norm_stats(dataset_dir, num_episodes)
-    
+
     # obtain train test split
     train_ratio = 0.8
     shuffled_indices = np.random.permutation(num_episodes)
