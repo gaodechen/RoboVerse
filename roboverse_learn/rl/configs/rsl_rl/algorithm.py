@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from dataclasses import MISSING
-from typing import Literal
+from typing import List, Literal
 
 from metasim.utils import configclass
 
@@ -35,10 +35,10 @@ class RslRlPpoActorCriticCfg:
     critic_obs_normalization: bool = MISSING
     """Whether to normalize the observation for the critic network."""
 
-    actor_hidden_dims: list[int] = MISSING
+    actor_hidden_dims: List[int] = MISSING
     """The hidden dimensions of the actor network."""
 
-    critic_hidden_dims: list[int] = MISSING
+    critic_hidden_dims: List[int] = MISSING
     """The hidden dimensions of the critic network."""
 
     activation: str = MISSING
@@ -156,21 +156,6 @@ class RslRlBaseRunnerCfg:
 
     The keys of the dictionary are predefined observation sets used by the underlying algorithm
     and values are lists of observation groups provided by the environment.
-
-    For instance, if the environment provides a dictionary of observations with groups "policy", "images",
-    and "privileged", these can be mapped to algorithmic observation sets as follows:
-
-    .. code-block:: python
-
-        obs_groups = {
-            "policy": ["policy", "images"],
-            "critic": ["policy", "privileged"],
-        }
-
-    This way, the policy will receive the "policy" and "images" observations, and the critic will
-    receive the "policy" and "privileged" observations.
-
-    For more details, please check ``vec_env.py`` in the rsl_rl library.
     """
 
     clip_actions: float | None = None
@@ -187,12 +172,7 @@ class RslRlBaseRunnerCfg:
     """The experiment name."""
 
     run_name: str = ""
-    """The run name. Default is empty string.
-
-    The name of the run directory is typically the time-stamp at execution. If the run name is not empty,
-    then it is appended to the run directory's name, i.e. the logging directory's name will become
-    ``{time-stamp}_{run_name}``.
-    """
+    """The run name. Default is empty string."""
 
     logger: Literal["tensorboard", "neptune", "wandb"] = "tensorboard"
     """The logger to use. Default is tensorboard."""
@@ -203,23 +183,14 @@ class RslRlBaseRunnerCfg:
     wandb_project: str = "isaaclab"
     """The wandb project name. Default is "isaaclab"."""
 
-    resume: bool = False
-    """Whether to resume a previous training. Default is False.
-
-    This flag will be ignored for distillation.
-    """
+    resume: str | None = None
+    """Resume directory name (timestamp) for training/evaluation."""
 
     load_run: str = ".*"
-    """The run directory to load. Default is ".*" (all).
-
-    If regex expression, the latest (alphabetical order) matching run will be loaded.
-    """
+    """The run directory to load. Default is ".*" (all)."""
 
     load_checkpoint: str = "model_.*.pt"
-    """The checkpoint file to load. Default is ``"model_.*.pt"`` (all).
-
-    If regex expression, the latest (alphabetical order) matching file will be loaded.
-    """
+    """The checkpoint file to load. Default is ``"model_.*.pt"`` (all)."""
 
 
 @configclass
@@ -234,3 +205,12 @@ class RslRlOnPolicyRunnerCfg(RslRlBaseRunnerCfg):
 
     algorithm: RslRlPpoAlgorithmCfg = MISSING
     """The algorithm configuration."""
+
+
+__all__ = [
+    "RslRlPpoActorCriticCfg",
+    "RslRlPpoActorCriticRecurrentCfg",
+    "RslRlPpoAlgorithmCfg",
+    "RslRlBaseRunnerCfg",
+    "RslRlOnPolicyRunnerCfg",
+]
