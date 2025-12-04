@@ -27,7 +27,7 @@ import gymnasium as gym
 from metasim.utils import configclass
 from metasim.scenario.cameras import PinholeCameraCfg
 from metasim.utils.obs_utils import ObsSaver
-from roboverse_learn.il.dp.runner.base_policy import BasePolicyCfg, ActionCfg, ObsCfg, EndEffectorCfg
+from roboverse_learn.il.runner.base_policy import BasePolicyCfg, ActionCfg, ObsCfg, EndEffectorCfg
 
 
 @configclass

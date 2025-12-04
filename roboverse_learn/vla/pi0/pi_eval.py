@@ -22,7 +22,7 @@ from metasim.utils.ik_solver import process_gripper_command, setup_ik_solver
 
 from openpi_client import image_tools, websocket_client_policy
 
-from roboverse_learn.il.dp.runner.base_policy import ActionCfg, BasePolicyCfg, ObsCfg
+from roboverse_learn.il.runner.base_policy import ActionCfg, BasePolicyCfg, ObsCfg
 
 
 @configclass
